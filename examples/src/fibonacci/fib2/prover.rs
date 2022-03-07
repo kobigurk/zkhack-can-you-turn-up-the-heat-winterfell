@@ -4,7 +4,7 @@
 // LICENSE file in the root directory of this source tree.
 
 use super::{
-    BaseElement, FibAir, FieldElement, ProofOptions, Prover, Trace, TraceTable, TRACE_WIDTH,
+    BaseElement, FibAir, FieldElement, ProofOptions, Prover, Trace, TraceTable, TRACE_WIDTH, air::FibInputs,
 };
 
 // FIBONACCI PROVER
@@ -30,7 +30,7 @@ impl FibProver {
         let mut trace = TraceTable::new(TRACE_WIDTH, sequence_length / 2);
         trace.fill(
             |state| {
-                state[0] = BaseElement::ONE;
+                state[0] = BaseElement::ZERO;
                 state[1] = BaseElement::ONE;
             },
             |_, state| {
@@ -48,9 +48,13 @@ impl Prover for FibProver {
     type Air = FibAir;
     type Trace = TraceTable<BaseElement>;
 
-    fn get_pub_inputs(&self, trace: &Self::Trace) -> BaseElement {
-        let last_step = trace.length() - 1;
-        trace.get(1, last_step)
+    fn get_pub_inputs(&self, trace: &Self::Trace) -> FibInputs {
+        //let last_step = trace.length() - 1;
+        //trace.get(1, last_step)
+        FibInputs {
+            start: (BaseElement::ZERO, BaseElement::ONE),
+            end: BaseElement::new(123)
+        }
     }
 
     fn options(&self) -> &ProofOptions {

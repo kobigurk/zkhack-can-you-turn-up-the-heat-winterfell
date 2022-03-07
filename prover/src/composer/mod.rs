@@ -9,6 +9,9 @@ use core::marker::PhantomData;
 use math::{add_in_place, fft, log2, mul_acc, polynom, FieldElement, StarkField};
 use utils::{collections::Vec, iter_mut};
 
+mod composer;
+pub use composer::DeepComposer;
+
 #[cfg(feature = "concurrent")]
 use utils::iterators::*;
 

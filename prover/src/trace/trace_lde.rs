@@ -74,6 +74,10 @@ impl<B: StarkField> TraceLde<B> {
         self.read_row_into(next_lde_step, frame.next_mut());
     }
 
+    pub fn data(&self) -> &[Vec<B>] {
+        &self.data
+    }
+
     // TRACE COMMITMENT
     // --------------------------------------------------------------------------------------------
     /// Builds a Merkle tree out of trace table rows (hash of each row becomes a leaf in the tree).
