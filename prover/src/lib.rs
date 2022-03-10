@@ -83,7 +83,7 @@ mod constraints;
 use constraints::{ConstraintCommitment, ConstraintEvaluator};
 
 mod composer;
-use composer::DeepCompositionPoly;
+use composer::{DeepCompositionPoly, DeepComposer};
 
 mod trace;
 use trace::TracePolyTable;
@@ -212,8 +212,8 @@ pub trait Prover {
         // make sure the specified trace is valid against the AIR. This checks validity of both,
         // assertions and state transitions. we do this in debug mode only because this is a very
         // expensive operation.
-        #[cfg(debug_assertions)]
-        trace.validate(&air);
+        //#[cfg(debug_assertions)]
+        //trace.validate(&air);
 
         // create a channel which is used to simulate interaction between the prover and the
         // verifier; the channel will be used to commit to values and to draw randomness that
@@ -269,7 +269,7 @@ pub trait Prover {
         #[cfg(feature = "std")]
         let now = Instant::now();
         let constraint_coeffs = channel.get_constraint_composition_coeffs();
-        let evaluator = ConstraintEvaluator::new(&air, constraint_coeffs);
+        let evaluator = ConstraintEvaluator::new(&air, constraint_coeffs.clone());
         let constraint_evaluations = evaluator.evaluate(&extended_trace, &domain);
         #[cfg(feature = "std")]
         debug!(
@@ -311,7 +311,7 @@ pub trait Prover {
         // finally, commit to the composition polynomial evaluations
         #[cfg(feature = "std")]
         let now = Instant::now();
-        let constraint_commitment = ConstraintCommitment::<E, H>::new(composed_evaluations);
+        let constraint_commitment = ConstraintCommitment::<E, H>::new(composed_evaluations.clone());
         channel.commit_constraints(constraint_commitment.root());
         #[cfg(feature = "std")]
         debug!(
@@ -339,46 +339,52 @@ pub trait Prover {
         let ood_frame = trace_polys.get_ood_frame(z);
         channel.send_ood_evaluation_frame(&ood_frame);
 
-        let ood_evaluations = composition_poly.evaluate_at(z);
+        let ood_evaluations = composition_poly.evaluate_at(z, &ood_frame, &air, constraint_coeffs);
         channel.send_ood_constraint_evaluations(&ood_evaluations);
 
         // draw random coefficients to use during DEEP polynomial composition, and use them to
         // initialize the DEEP composition polynomial
         let deep_coefficients = channel.get_deep_composition_coeffs();
-        let mut deep_composition_poly = DeepCompositionPoly::new(&air, z, deep_coefficients);
+        //let mut deep_composition_poly = DeepCompositionPoly::new(&air, z, deep_coefficients.clone());
 
         // combine all trace polynomials together and merge them into the DEEP composition
         // polynomial
-        deep_composition_poly.add_trace_polys(trace_polys, ood_frame);
+        //deep_composition_poly.add_trace_polys(trace_polys, ood_frame);
 
         // merge columns of constraint composition polynomial into the DEEP composition polynomial;
-        deep_composition_poly.add_composition_poly(composition_poly, ood_evaluations);
+        //deep_composition_poly.add_composition_poly(composition_poly, ood_evaluations);
 
         // raise the degree of the DEEP composition polynomial by one to make sure it is equal to
         // trace_length - 1
-        deep_composition_poly.adjust_degree();
+        //deep_composition_poly.adjust_degree();
 
-        #[cfg(feature = "std")]
-        debug!(
-            "Built DEEP composition polynomial of degree {} in {} ms",
-            deep_composition_poly.degree(),
-            now.elapsed().as_millis()
-        );
+        //#[cfg(feature = "std")]
+        //debug!(
+        //    "Built DEEP composition polynomial of degree {} in {} ms",
+        //    deep_composition_poly.degree(),
+        //    now.elapsed().as_millis()
+        //);
 
         // make sure the degree of the DEEP composition polynomial is equal to trace polynomial
         // degree
-        assert_eq!(domain.trace_length() - 1, deep_composition_poly.degree());
+        //assert_eq!(domain.trace_length() - 1, deep_composition_poly.degree());
 
         // 6 ----- evaluate DEEP composition polynomial over LDE domain ---------------------------
+        let domain_xs = (0..domain.lde_domain_size()).map(|v| v).collect::<Vec<_>>();
+        let deep_composer = DeepComposer::new(&air, &domain_xs, z, deep_coefficients);
+        let t_composition = deep_composer.compose_registers(extended_trace.data(), ood_frame);
+        let c_composition = deep_composer.compose_constraints(composed_evaluations, ood_evaluations);
+        let deep_evaluations = deep_composer.combine_compositions(t_composition, c_composition);
+
         #[cfg(feature = "std")]
         let now = Instant::now();
-        let deep_evaluations = deep_composition_poly.evaluate(&domain);
+        //let deep_evaluations = deep_composition_poly.evaluate(&domain);
         // we check the following condition in debug mode only because infer_degree is an expensive
         // operation
-        debug_assert_eq!(
-            domain.trace_length() - 1,
-            infer_degree(&deep_evaluations, domain.offset())
-        );
+        //debug_assert_eq!(
+        //    domain.trace_length() - 1,
+        //    infer_degree(&deep_evaluations, domain.offset())
+        //);
         #[cfg(feature = "std")]
         debug!(
             "Evaluated DEEP composition polynomial over LDE domain (2^{} elements) in {} ms",

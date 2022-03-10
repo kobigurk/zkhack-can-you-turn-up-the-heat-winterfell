@@ -5,6 +5,7 @@
 
 use super::StarkDomain;
 use core::marker::PhantomData;
+use air::{EvaluationFrame, Air, ConstraintCompositionCoefficients};
 use math::{fft, polynom, FieldElement, StarkField};
 use utils::{collections::Vec, iter, uninit_vector};
 
@@ -105,11 +106,17 @@ impl<B: StarkField, E: FieldElement<BaseField = B>> CompositionPoly<B, E> {
 
     /// Returns evaluations of all composition polynomial columns at point z^m, where m is
     /// the number of column polynomials.
-    pub fn evaluate_at(&self, z: E) -> Vec<E> {
+    pub fn evaluate_at<A: Air<BaseField = E::BaseField>>(&self, z: E, frame: &EvaluationFrame<E>, air: &A, coeffs: ConstraintCompositionCoefficients<E>) -> Vec<E> {
+        let x = evaluate_constraints(air, coeffs, &frame, z);
         let z_m = z.exp((self.columns.len() as u32).into());
-        iter!(self.columns)
+        let result: Vec<E> = iter!(self.columns)
             .map(|poly| polynom::eval(poly, z_m))
-            .collect()
+            .collect();
+
+        let r1 = (x - result[0]) / z;
+        let result2 = vec![result[0], r1];
+
+        result2
     }
 
     /// Transforms this composition polynomial into a vector of individual column polynomials.
@@ -168,4 +175,66 @@ mod tests {
 
         assert_eq!(expected, actual)
     }
+}
+
+pub fn evaluate_constraints<A: Air, E: FieldElement<BaseField = A::BaseField>>(
+    air: &A,
+    coefficients: ConstraintCompositionCoefficients<E>,
+    ood_frame: &EvaluationFrame<E>,
+    x: E,
+) -> E {
+    // 1 ----- evaluate transition constraints ----------------------------------------------------
+
+    // initialize a buffer to hold transition constraint evaluations
+    let mut t_evaluations = E::zeroed_vector(air.num_transition_constraints());
+
+    // compute values of periodic columns at x
+    let periodic_values = air
+        .get_periodic_column_polys()
+        .iter()
+        .map(|poly| {
+            let num_cycles = air.trace_length() / poly.len();
+            let x = x.exp((num_cycles as u32).into());
+            polynom::eval(poly, x)
+        })
+        .collect::<Vec<_>>();
+
+    // evaluate transition constraints over OOD evaluation frame
+    air.evaluate_transition(ood_frame, &periodic_values, &mut t_evaluations);
+
+    // merge all constraint evaluations into a single value by computing their random linear
+    // combination using coefficients drawn from the public coin
+    let t_constraints = air.get_transition_constraints(&coefficients.transition);
+    let t_evaluation = t_constraints.iter().fold(E::ZERO, |acc, group| {
+        acc + group.merge_evaluations(&t_evaluations, x)
+    });
+
+    // divide out the evaluation of divisor at x
+    let z = air.transition_constraint_divisor().evaluate_at(x);
+    let mut result = t_evaluation / z;
+
+    // 2 ----- evaluate boundary constraints ------------------------------------------------------
+
+    // get boundary constraints grouped by common divisor from the AIR
+    let b_constraints = air.get_boundary_constraints(&coefficients.boundary);
+
+    // iterate over boundary constraint groups (each group has a distinct divisor), evaluate
+    // constraints in each group and add them to the evaluations vector
+
+    // cache power of x here so that we only re-compute it when degree_adjustment changes
+    let mut degree_adjustment = b_constraints[0].degree_adjustment();
+    let mut xp = x.exp(degree_adjustment.into());
+
+    for group in b_constraints.iter() {
+        // if adjustment degree hasn't changed, no need to recompute `xp` - so just reuse the
+        // previous value; otherwise, compute new `xp`
+        if group.degree_adjustment() != degree_adjustment {
+            degree_adjustment = group.degree_adjustment();
+            xp = x.exp(degree_adjustment.into());
+        }
+        // evaluate all constraints in the group, and add the evaluation to the result
+        result += group.evaluate_at(ood_frame.current(), x, xp);
+    }
+
+    result
 }

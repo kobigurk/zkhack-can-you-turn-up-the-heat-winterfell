@@ -13,7 +13,7 @@ use winterfell::{
 };
 
 mod air;
-use air::FibAir;
+use air::{FibAir, FibInputs};
 
 mod prover;
 use prover::FibProver;
@@ -98,10 +98,17 @@ impl Example for FibExample {
     }
 
     fn verify(&self, proof: StarkProof) -> Result<(), VerifierError> {
-        winterfell::verify::<FibAir>(proof, self.result)
+        println!("proof: {}", hex::encode(proof.to_bytes()));
+        let inputs = FibInputs {
+            start: (BaseElement::ZERO, BaseElement::ONE),
+            end: BaseElement::new(123)
+        };
+        winterfell::verify::<FibAir>(proof, inputs)
+        //winterfell::verify::<FibAir>(proof, self.result)
     }
 
     fn verify_with_wrong_inputs(&self, proof: StarkProof) -> Result<(), VerifierError> {
-        winterfell::verify::<FibAir>(proof, self.result + BaseElement::ONE)
+        unimplemented!()
+        //winterfell::verify::<FibAir>(proof, self.result + BaseElement::ONE)
     }
 }

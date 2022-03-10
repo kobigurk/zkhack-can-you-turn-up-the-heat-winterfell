@@ -83,8 +83,8 @@ impl ExampleOptions {
             self.grinding_factor,
             hash_fn,
             field_extension,
-            self.folding_factor,
-            256,
+            4,
+            32,
         )
     }
 }

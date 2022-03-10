@@ -6,32 +6,51 @@
 use super::{BaseElement, FieldElement, ProofOptions, TRACE_WIDTH};
 use crate::utils::are_equal;
 use winterfell::{
-    Air, AirContext, Assertion, EvaluationFrame, TraceInfo, TransitionConstraintDegree,
+    Air, AirContext, Assertion, EvaluationFrame, TraceInfo, TransitionConstraintDegree, Serializable,
+    ByteWriter
 };
+
+// PUBLIC INPUTS
+// ================================================================================================
+
+#[derive(Clone)]
+pub struct FibInputs {
+    pub start: (BaseElement, BaseElement),
+    pub end: BaseElement,
+}
+
+impl Serializable for FibInputs {
+    fn write_into<W: ByteWriter>(&self, target: &mut W) {
+        target.write(self.start.0);
+        target.write(self.start.1);
+        target.write(self.end);
+    }
+}
 
 // FIBONACCI AIR
 // ================================================================================================
 
 pub struct FibAir {
     context: AirContext<BaseElement>,
-    result: BaseElement,
+    start: (BaseElement, BaseElement),
+    end: BaseElement,
 }
 
 impl Air for FibAir {
     type BaseField = BaseElement;
-    type PublicInputs = BaseElement;
+    type PublicInputs = FibInputs;
 
     // CONSTRUCTOR
     // --------------------------------------------------------------------------------------------
-    fn new(trace_info: TraceInfo, pub_inputs: Self::BaseField, options: ProofOptions) -> Self {
+    fn new(trace_info: TraceInfo, pub_inputs: FibInputs, options: ProofOptions) -> Self {
         let degrees = vec![
             TransitionConstraintDegree::new(1),
             TransitionConstraintDegree::new(1),
         ];
-        assert_eq!(TRACE_WIDTH, trace_info.width());
-        FibAir {
+        Self {
             context: AirContext::new(trace_info, degrees, options),
-            result: pub_inputs,
+            start: pub_inputs.start,
+            end: pub_inputs.end,
         }
     }
 
@@ -63,9 +82,9 @@ impl Air for FibAir {
         // the expected result
         let last_step = self.trace_length() - 1;
         vec![
-            Assertion::single(0, 0, Self::BaseField::ONE),
-            Assertion::single(1, 0, Self::BaseField::ONE),
-            Assertion::single(1, last_step, self.result),
+            Assertion::single(0, 0, self.start.0),
+            Assertion::single(1, 0, self.start.1),
+            Assertion::single(0, last_step, self.end),
         ]
     }
 }
