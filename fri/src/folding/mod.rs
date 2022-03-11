@@ -13,7 +13,7 @@ use utils::iterators::*;
 
 use math::{
     batch_inversion,
-    fft::{get_inv_twiddles, serial_fft},
+    fft::{get_inv_twiddles, serial_fft, infer_degree},
     get_power_series_with_offset, polynom, FieldElement, StarkField,
 };
 use utils::{collections::Vec, iter_mut, uninit_vector};
@@ -113,6 +113,14 @@ where
             // evaluate the polynomial at alpha, and save the result
             *result = polynom::eval(&poly, alpha)
         });
+
+    if result.len() == 32 {
+        let g = B::get_root_of_unity(result.len().trailing_zeros());
+        let domain = get_power_series_with_offset(g, domain_offset, result.len()).iter().map(|&v| E::from(v)).collect::<Vec<_>>();
+        //HINT3: To pass FRI checks, the result of folding the first FRI layer should be a degree 3 polynomial. Since the first FRI layer is folded from a domain of 128 elements to a domain of 32 elements, we can pick some 4 points in the folded domain, interpolate them into a degree 3 polynomial, and then back fill the remaining 28 points with correct evaluations of this polynomial. The trick then is to try different versions of the proof so that the randomly selected query indexes fall on the values which were folded correctly. Since we only have a single FRI query, this is easy to do.
+    }
+
+    println!("folded degree: {} / {}", infer_degree(&result, domain_offset), result.len());
 
     result
 }
